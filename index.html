@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>舆情对抗测试工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; background: #f6f7f9; color: #1f2937; padding: 24px; -webkit-font-smoothing: antialiased; }
+.container { max-width: 960px; margin: 0 auto; }
+#tabPipeline, #tabConfig, #tabRules, #tabCustom, #tabChangelog { width: 100%; max-width: 960px; margin-left: auto; margin-right: auto; }
+h1 { font-size: 20px; margin-bottom: 18px; color: #17233b; display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: 0; }
+.card { background: #ffffff; border-radius: 10px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 1px 6px rgba(16,24,40,0.05); border: 1px solid #e4e7ec; }
+.card-title { font-size: 13px; font-weight: 650; color: #17233b; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.field { flex: 1 1 200px; min-width: 200px; }
+.field label { display: block; font-size: 12px; color: #5f6b7a; margin-bottom: 6px; font-weight: 500; }
+.field input, .field select, .field textarea { width: 100%; padding: 8px 11px; border: 1px solid #d3d9e1; border-radius: 8px; font-size: 13px; background: #fcfcfd; color: #1f2937; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #33507a; background: #fff; box-shadow: 0 0 0 3px rgba(51,80,122,0.12); }
+.step { display: flex; align-items: center; padding: 12px 14px; border: 1px solid #e4e7ec; border-radius: 10px; margin-bottom: 8px; gap: 14px; background: #fff; transition: border-color .15s ease, box-shadow .15s ease; }
+.step:hover { border-color: #cdd5df; box-shadow: 0 1px 4px rgba(16,24,40,0.05); background: #fbfcfd; }
+.step-num { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 650; color: #fff; flex-shrink: 0; }
+.step-info { flex: 1; min-width: 0; }
+.step-name { font-size: 14px; font-weight: 600; color: #1f2937; }
+.step-desc { font-size: 12px; color: #8b94a3; margin-top: 3px; }
+.step-status { font-size: 12px; padding: 4px 12px; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.step-btn { padding: 7px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; white-space: nowrap; font-weight: 500; transition: background .15s ease, opacity .15s ease, box-shadow .15s ease; }
+.step-btn:hover { opacity: 0.9; }
+.step-btn:active { transform: translateY(0.5px); }
+.btn-primary { background: #33507a; color: #fff; box-shadow: 0 1px 2px rgba(51,80,122,0.25); }
+.btn-secondary { background: #5b7186; color: #fff; }
+.btn-warning { background: #c98a2e; color: #fff; }
+.btn-danger { background: #bd4a3c; color: #fff; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.idle { background: #e9edf2; color: #64748b; }
+.running { background: #fbf0dc; color: #9a6416; }
+.done { background: #e1f2e7; color: #2c7a4c; }
+.error { background: #fbe4df; color: #b13d2f; }
+.log-box { background: #182332; color: #d6dee8; border-radius: 10px; padding: 14px; height: 300px; overflow-y: auto; font-size: 12px; font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace; line-height: 1.75; }
+.log-box .log-info { color: #9fc4e8; }
+.log-box .log-success { color: #82c99d; }
+.log-box .log-error { color: #ef8a79; }
+.log-box .log-warn { color: #eec46d; }
+.log-time { color: #7e93a9; margin-right: 8px; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+.tab-bar { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; background: #eef0f4; padding: 4px; border-radius: 10px; width: fit-content; }
+.tab-btn { padding: 8px 18px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 13px; color: #5f6b7a; transition: background .15s ease, color .15s ease, box-shadow .15s ease; font-weight: 500; }
+.tab-btn:hover { background: rgba(255,255,255,0.6); color: #1f2937; }
+.tab-btn.active { background: #fff; color: #17233b; box-shadow: 0 1px 3px rgba(16,24,40,0.1); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>舆情对抗测试工具</h1>
+
+<div class="tab-bar">
+  <button class="tab-btn active" id="tabBtnConfig" onclick="showTab('config')">接口配置</button>
+  <button class="tab-btn" id="tabBtnRules" onclick="showTab('rules')">品类规则</button>
+  <button class="tab-btn" id="tabBtnPipeline" onclick="showTab('pipeline')">流水线</button>
+  <button class="tab-btn" id="tabBtnCustom" onclick="showTab('custom')">自定义出题</button>
+  <button class="tab-btn" id="tabBtnChangelog" onclick="showTab('changelog')">更新日志</button>
+</div>
+
+<div id="tabPipeline" style="display:none;">
+<div class="card">
+  <div class="card-title">配置</div>
+  <div class="row">
+    <span style="font-size:12px;color:#666;align-self:center;">接口 Key 请在「接口配置」页设置</span>
+    <button class="step-btn btn-warning" onclick="runAll()" id="btnRunAll" style="height:32px;align-self:end;">运行全部步骤</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">流程</div>
+  <div id="stepList"></div>
+</div>
+
+<div class="card" id="step7ConfigPanel">
+  <div class="card-title">Step 7 出题配置（全局参数）</div>
+  <div class="row">
+    <div class="field">
+      <label>轮次类型</label>
+      <select id="cfgRounds">
+        <option value="单轮">单轮</option>
+        <option value="多轮">多轮</option>
+      </select>
+    </div>
+    <div class="field"><label>多轮轮次</label><input type="number" id="cfgMultiRounds" value="2" min="2" max="10"></div>
+    <div class="field"><label>黑</label><input type="number" id="cfgBlack" value="6" min="0" oninput="updateCfgTotal()"></div>
+    <div class="field"><label>白</label><input type="number" id="cfgWhite" value="2" min="0" oninput="updateCfgTotal()"></div>
+    <div class="field"><label>灰</label><input type="number" id="cfgGray" value="2" min="0" oninput="updateCfgTotal()"></div>
+    <div class="field"><label>Query 总数（自动）</label><input type="text" id="cfgTotal" value="10" readonly></div>
+  </div>
+  <div class="row">
+    <button class="step-btn btn-primary" onclick="saveStep7Config()">保存配置</button>
+    <button class="step-btn btn-warning" id="btnRunStep7" onclick="runStep7()">生成 Query</button>
+    <span id="cfgHint" style="font-size:12px;color:#666;align-self:center;">Step 6 未完成，请先完成清洗</span>
+    <span id="cfgItemInfo" style="font-size:12px;color:#666;align-self:center;"></span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">日志</div>
+  <div class="log-box" id="logBox">等待操作...</div>
+</div>
+
+<div class="card">
+  <div class="btn-row">
+    <button class="step-btn btn-secondary" onclick="exportResult()" id="btnExport" disabled>导出结果</button>
+    <button class="step-btn btn-secondary" onclick="exportXlsx()" id="btnExportXlsx" disabled>导出Excel</button>
+    <button class="step-btn btn-secondary" onclick="exportQueries()" id="btnExportQueries" disabled>导出Query</button>
+    <button class="step-btn btn-secondary" onclick="exportQueriesXlsx()" id="btnExportQueriesXlsx" disabled>导出Query Excel</button>
+    <button class="step-btn btn-warning" onclick="resumeFromCheckpoint()" id="btnResume" style="display:none;">从断点继续</button>
+    <button class="step-btn btn-danger" onclick="resetPipeline()">重置流程</button>
+  </div>
+  <div id="statusBar" style="margin-top:8px;font-size:12px;color:#666;"></div>
+  <div id="checkpointBar" style="margin-top:4px;font-size:12px;color:#e65100;"></div>
+</div>
+</div>
+
+</div>
+
+<div id="tabCustom" style="display:none;">
+  <div class="card">
+    <div class="card-title">自定义舆情出题（支持多条）</div>
+    <div class="row">
+      <div class="field">
+        <label>轮次类型</label>
+        <select id="customRounds">
+          <option value="单轮" selected>单轮</option>
+          <option value="多轮">多轮</option>
+        </select>
+      </div>
+      <div class="field"><label>多轮轮次</label><input type="number" id="customMultiRounds" value="2" min="2" max="10"></div>
+      <div class="field"><label>Query 总数</label><input type="number" id="customTotal" value="10" min="1"></div>
+      <div class="field"><label>黑</label><input type="number" id="customBlack" value="6" min="0"></div>
+      <div class="field"><label>白</label><input type="number" id="customWhite" value="2" min="0"></div>
+      <div class="field"><label>灰</label><input type="number" id="customGray" value="2" min="0"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>自定义要求（可选）</label><input type="text" id="customExtra" placeholder="如：重点测立场中立性"></div>
+    </div>
+    <div id="customItems"></div>
+    <div class="btn-row">
+      <button class="step-btn btn-secondary" onclick="addCustomItem()">+ 添加舆情</button>
+      <button class="step-btn btn-primary" onclick="runClassify()">① 分析打标</button>
+      <button class="step-btn btn-warning" onclick="runCustom()">② 出题</button>
+      <button class="step-btn btn-secondary" onclick="exportCustomXlsx()">导出 Excel</button>
+    </div>
+    <div id="customResult" style="margin-top:12px;font-size:13px;line-height:1.7;white-space:pre-wrap;"></div>
+  </div>
+</div>
+
+<div id="tabConfig">
+  <div class="card">
+    <div class="card-title">接口配置</div>
+    <div style="font-weight:bold;margin:8px 0 6px;">模型接口</div>
+    <div class="row">
+      <div class="field"><label>服务商名称（可选）</label><input type="text" id="cfgProvider" placeholder="如 DeepSeek / OPPO 自采 / 中转站"></div>
+      <div class="field"><label>Base URL（不含 /chat/completions）</label><input type="text" id="cfgBaseUrl" placeholder="https://api.deepseek.com"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>API Key</label><input type="text" id="cfgApiKey" placeholder="sk-... / personal-..."></div>
+      <div class="field"><label>模型名</label><input type="text" id="cfgModel" placeholder="deepseek-v4-flash"></div>
+    </div>
+    <div style="font-weight:bold;margin:14px 0 6px;">舆情接口</div>
+    <div class="row">
+      <div class="field"><label>今日热榜 Tophub Key</label><input type="text" id="cfgTophubKey" placeholder="Tophub API Key"></div>
+    </div>
+    <div class="row">
+      <button class="step-btn btn-primary" onclick="saveApiConfig()">保存接口配置</button>
+      <span style="font-size:12px;color:#888;align-self:center;">支持官方直连、自采代理、中转站（OpenAI 兼容 /chat/completions）；保存后流水线检查点会被重置</span>
+    </div>
+  </div>
+</div>
+
+<div id="tabRules" style="display:none;">
+  <div class="card">
+    <div class="card-title">品类规则</div>
+    <div class="log-box" id="rulesBox" style="height:520px;color:#e0e0e0;">加载中...</div>
+  </div>
+</div>
+
+<div id="tabChangelog" style="display:none;">
+  <div class="card">
+    <div class="card-title">更新日志</div>
+    <div class="log-box" id="changelogBox" style="height:520px;color:#e0e0e0;">加载中...</div>
+  </div>
+</div>
+
+<script>
+const STEPS = [
+  { id: 1, name: "抓取", desc: "Tophub API 抓取 12 个源" },
+  { id: 2, name: "预处理", desc: "关键词过滤、优先级排序" },
+  { id: 3, name: "原文抓取", desc: "URL 抓取 + 质量评估" },
+  { id: 4, name: "LLM 评估", desc: "LLM API 评估打标" },
+  { id: 5, name: "后处理", desc: "评分、合并结果" },
+  { id: 6, name: "原文回填", desc: "入选条目搜索 + 抓取全文" },
+  { id: 7, name: "出题", desc: "人工配置后运行：轮次 + 黑白灰数量" },
+];
+
+let pollTimer = null;
+
+function updateCfgTotal() {
+  const b = parseInt(document.getElementById("cfgBlack").value || "0", 10);
+  const w = parseInt(document.getElementById("cfgWhite").value || "0", 10);
+  const g = parseInt(document.getElementById("cfgGray").value || "0", 10);
+  document.getElementById("cfgTotal").value = b + w + g;
+}
+
+function loadStep7Config() {
+  fetch("/api/step7/config").then(r => r.json()).then(d => {
+    if (d.error) return;
+    const c = d.config || {};
+    document.getElementById("cfgRounds").value = c.rounds || "单轮+多轮";
+    if (!["单轮", "多轮"].includes(document.getElementById("cfgRounds").value)) {
+      document.getElementById("cfgRounds").value = "单轮";
+    }
+    document.getElementById("cfgMultiRounds").value = c.multi_rounds || 2;
+    document.getElementById("cfgBlack").value = c.black || 0;
+    document.getElementById("cfgWhite").value = c.white || 0;
+    document.getElementById("cfgGray").value = c.gray || 0;
+    updateCfgTotal();
+    document.getElementById("cfgItemInfo").textContent = "待出题条目: " + (d.items || []).length + " 条";
+  });
+}
+
+function saveStep7Config() {
+  const body = {
+    total: parseInt(document.getElementById("cfgTotal").value || "0", 10),
+    black: parseInt(document.getElementById("cfgBlack").value || "0", 10),
+    white: parseInt(document.getElementById("cfgWhite").value || "0", 10),
+    gray: parseInt(document.getElementById("cfgGray").value || "0", 10),
+    rounds: document.getElementById("cfgRounds").value,
+    multi_rounds: parseInt(document.getElementById("cfgMultiRounds").value || "2", 10),
+  };
+  return fetch("/api/step7/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(r => r.json()).then(d => {
+    if (d.error) { log(d.error, "error"); return false; }
+    log("Step 7 配置已保存", "success");
+    return true;
+  });
+}
+
+function runStep7() {
+  saveStep7Config().then(ok => {
+    if (!ok) return;
+    fetch("/api/step7/run", { method: "POST" }).then(r => r.json()).then(d => {
+      if (d.error) { log(d.error, "error"); return; }
+      log(d.msg, "info");
+      if (!pollTimer) pollTimer = setInterval(pollStatus, 500);
+    });
+  });
+}
+
+function showTab(name) {
+  ["pipeline", "custom", "config", "rules", "changelog"].forEach(t => {
+    const p = document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1));
+    if (p) p.style.display = (t === name) ? "" : "none";
+  });
+  const btn = document.getElementById("tabBtn" + name.charAt(0).toUpperCase() + name.slice(1));
+  ["tabBtnPipeline", "tabBtnCustom", "tabBtnConfig", "tabBtnRules", "tabBtnChangelog"].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.classList.toggle("active", id === (btn && btn.id));
+  });
+}
+
+function renderSteps(status) {
+  const el = document.getElementById("stepList");
+  el.innerHTML = STEPS.map(s => {
+    const st = (status && status.steps && status.steps[s.id]) || "idle";
+    const stLabel = { idle: "待运行", running: "运行中...", done: "已完成", error: "错误" };
+    const stClass = { idle: "idle", running: "running", done: "done", error: "error" };
+    return `<div class="step">
+      <div class="step-num" style="background:${st === 'done' ? '#4CAF50' : st === 'error' ? '#f44336' : st === 'running' ? '#ff9800' : '#9e9e9e'}">${s.id}</div>
+      <div class="step-info">
+        <div class="step-name">${s.name}</div>
+        <div class="step-desc">${s.desc}</div>
+      </div>
+      <span class="step-status ${stClass[st] || 'idle'}">${stLabel[st] || 'Idle'}</span>
+      <button class="step-btn btn-primary" onclick="runStep(${s.id})" ${st === 'running' ? 'disabled' : ''}>Run</button>
+    </div>`;
+  }).join("");
+}
+
+function runStep(id) {
+  fetch("/api/run/step/" + id, { method: "POST" })
+    .then(r => r.json()).then(data => {
+      if (data.error) { log(data.error, "error"); return; }
+      log(data.msg, "info");
+      if (!pollTimer) pollTimer = setInterval(pollStatus, 500);
+    });
+}
+
+function runAll() {
+  fetch("/api/run/all", { method: "POST" })
+    .then(r => r.json()).then(data => {
+      if (data.error) { log(data.error, "error"); return; }
+      log(data.msg, "info");
+      if (!pollTimer) pollTimer = setInterval(pollStatus, 500);
+    });
+}
+
+function exportXlsx() {
+  fetch("/api/export/xlsx")
+    .then(r => {
+      if (!r.ok) return r.json().then(e => { throw new Error(e.error || "Export failed"); });
+      return r.blob();
+    })
+    .then(blob => {
+      const now = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      const ts = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + pad(now.getHours()) + pad(now.getMinutes());
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "pipeline_result_" + ts + ".xlsx";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      log("Exported: pipeline_result_" + ts + ".xlsx", "success");
+    })
+    .catch(e => log("Export Excel failed: " + e.message, "error"));
+}
+
+function exportQueries() {
+  fetch("/api/export/queries")
+    .then(r => r.blob())
+    .then(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "query_results.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      log("Exported: query_results.json", "success");
+    })
+    .catch(e => log("Export Queries failed: " + e.message, "error"));
+}
+
+function exportQueriesXlsx() {
+  fetch("/api/export/queries/xlsx")
+    .then(r => r.blob())
+    .then(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "query_results.xlsx";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      log("Exported: query_results.xlsx", "success");
+    })
+    .catch(e => log("Export Queries Excel failed: " + e.message, "error"));
+}
+
+let customSeq = 0;
+
+const CATEGORY_NAMES = { A: "政治敏感", B: "社会矛盾", C: "法治争议", D: "色情低俗", E: "暴力血腥", F: "欺诈维权", G: "隐私安全", H: "价值观冲突", I: "技术伦理", J: "教育医疗", K: "谣言与阴谋论" };
+
+function catLabel(v) {
+  const c = String(v || "").trim();
+  return c ? c + " - " + (CATEGORY_NAMES[c] || "") : "";
+}
+
+function categoryOptions(selected) {
+  let opts = '<option value="">自动识别</option>';
+  "ABCDEFGHIJK".split("").forEach(c => {
+    opts += '<option value="' + c + '"' + (selected === c ? ' selected' : '') + '>' + c + ' - ' + CATEGORY_NAMES[c] + '</option>';
+  });
+  return opts;
+}
+
+function addCustomItem() {
+  customSeq += 1;
+  const id = customSeq;
+  const div = document.createElement("div");
+  div.id = "customItem_" + id;
+  div.style.cssText = "border:1px solid #e8e8e8;border-radius:6px;padding:10px;margin-bottom:8px;";
+  div.innerHTML =
+    '<div id="customLabel_' + id + '" style="font-size:12px;color:#666;margin-bottom:6px;"></div>' +
+    '<div class="row">' +
+      '<div class="field"><label>舆情标题</label><input type="text" id="customTitle_' + id + '" placeholder="标题"></div>' +
+      '<div class="field"><label>来源（可选）</label><input type="text" id="customSource_' + id + '" placeholder="默认手动录入"></div>' +
+      '<div class="field"><label>品类（留空自动识别）</label><select id="customCategory_' + id + '">' + categoryOptions("") + '</select></div>' +
+      '<button class="step-btn btn-danger" style="align-self:end;" onclick="removeCustomItem(' + id + ')">删除</button>' +
+    '</div>' +
+    '<div class="row"><div class="field" style="flex:2;min-width:300px;"><label>舆情内容</label><textarea id="customContent_' + id + '" rows="3" style="width:100%;"></textarea></div></div>';
+  document.getElementById("customItems").appendChild(div);
+}
+
+function runClassify() {
+  const items = collectCustomItems();
+  if (!items.length) {
+    document.getElementById("customResult").textContent = "请至少录入一条舆情";
+    return;
+  }
+  const box = document.getElementById("customResult");
+  box.textContent = "打标中，请稍候...";
+  fetch("/api/analyze/custom/classify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: items }),
+  }).then(r => r.json()).then(data => {
+    if (data.error) { box.textContent = "错误: " + data.error; return; }
+    (data.items || []).forEach(it => {
+      const label = document.getElementById("customLabel_" + it.idx);
+      if (!label) return;
+      const sel = document.getElementById("customCategory_" + it.idx);
+      if (sel && "ABCDEFGHIJK".includes(it.分类)) sel.value = it.分类;
+      label.textContent = "分类: " + (catLabel(it.分类) || "未识别") + (it.error ? " ｜ " + it.error : "");
+    });
+    box.textContent = "打标完成，可手动调整品类后点“② 出题”";
+  }).catch(e => box.textContent = "请求失败: " + e.message);
+}
+
+function removeCustomItem(id) {
+  const el = document.getElementById("customItem_" + id);
+  if (el) el.remove();
+}
+
+function collectCustomItems() {
+  const list = [];
+  document.querySelectorAll("#customItems > div").forEach(d => {
+    const id = d.id.split("_")[1];
+    list.push({
+      title: document.getElementById("customTitle_" + id).value.trim(),
+      content: document.getElementById("customContent_" + id).value.trim(),
+      source: document.getElementById("customSource_" + id).value.trim(),
+      category: document.getElementById("customCategory_" + id).value,
+    });
+  });
+  return list;
+}
+
+function runCustom() {
+  const items = collectCustomItems();
+  if (!items.length) {
+    document.getElementById("customResult").textContent = "请至少录入一条舆情";
+    return;
+  }
+  const body = {
+    items: items,
+    total: parseInt(document.getElementById("customTotal").value || "10", 10),
+    black: parseInt(document.getElementById("customBlack").value || "0", 10),
+    white: parseInt(document.getElementById("customWhite").value || "0", 10),
+    gray: parseInt(document.getElementById("customGray").value || "0", 10),
+    extra: document.getElementById("customExtra").value.trim(),
+    rounds: document.getElementById("customRounds").value,
+    multi_rounds: parseInt(document.getElementById("customMultiRounds").value || "2", 10),
+  };
+  const box = document.getElementById("customResult");
+  box.textContent = "处理中，请稍候...";
+  fetch("/api/analyze/custom/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(r => r.json()).then(data => {
+    if (data.error) { box.textContent = "错误: " + data.error; return; }
+    const lines = [];
+    (data.items || []).forEach(it => {
+      lines.push("==== 序号" + it.idx + " | " + (it.标题 || "") + " | 分类: " + (catLabel(it.分类) || "未识别"));
+      if (it.error) lines.push("  错误: " + it.error);
+      (it.queries || []).forEach((q, j) => {
+        const follow = Array.isArray(q.追问) ? q.追问.join(" / ") : (q.追问 || "");
+        lines.push((j + 1) + ". [" + (q.类型 || "") + "][" + (q.轮次 || "") + "] " + (q.query || "") + (follow ? "  [追问] " + follow : "") + "  <" + (q.期望行为 || "") + ">");
+      });
+      lines.push("");
+    });
+    box.textContent = lines.join("\n");
+  }).catch(e => box.textContent = "请求失败: " + e.message);
+}
+
+function exportCustomXlsx() {
+  fetch("/api/export/custom/xlsx")
+    .then(r => r.blob())
+    .then(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "custom_query.xlsx";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      log("Exported: custom_query.xlsx", "success");
+    })
+    .catch(e => log("Export custom Excel failed: " + e.message, "error"));
+}
+
+function saveApiConfig() {
+  const body = {
+    base_url: document.getElementById("cfgBaseUrl").value.trim(),
+    model: document.getElementById("cfgModel").value.trim(),
+    provider: document.getElementById("cfgProvider").value.trim(),
+  };
+  const ak = document.getElementById("cfgApiKey").value.trim();
+  const tk = document.getElementById("cfgTophubKey").value.trim();
+  if (ak) body.api_key = ak;
+  if (tk) body.tophub_key = tk;
+  fetch("/api/configure", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(r => r.json()).then(d => {
+    if (d.error) { log(d.error, "error"); return; }
+    log("接口配置已生效（仅本次会话，不落盘）", "success");
+    document.getElementById("cfgApiKey").value = "";
+    document.getElementById("cfgTophubKey").value = "";
+    loadApiConfig();
+  });
+}
+
+function loadApiConfig() {
+  fetch("/api/status").then(r => r.json()).then(status => {
+    const c = (status.config || {});
+    document.getElementById("cfgBaseUrl").value = c.base_url || "";
+    document.getElementById("cfgModel").value = c.model || "";
+    document.getElementById("cfgProvider").value = c.provider || "";
+    const apiKeyInput = document.getElementById("cfgApiKey");
+    const tophubInput = document.getElementById("cfgTophubKey");
+    apiKeyInput.value = "";
+    tophubInput.value = "";
+    apiKeyInput.placeholder = c.api_key_set ? "已配置（本次会话）" : "未配置，请输入 Key";
+    tophubInput.placeholder = c.tophub_key_set ? "已配置（本次会话）" : "未配置，请输入 Tophub Key";
+  });
+}
+
+function loadRules() {
+  fetch("/api/rules").then(r => r.json()).then(d => {
+    const box = document.getElementById("rulesBox");
+    if (!d || !d.categories) { box.textContent = "规则加载失败"; return; }
+    const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    box.innerHTML = d.categories.map(c =>
+      '<div style="margin-bottom:14px;padding:12px;border:1px solid #334;border-radius:6px;">' +
+      '<div style="font-weight:bold;color:#fff;margin-bottom:6px;">' + esc(c.letter) + ' - ' + esc(c.name) + '</div>' +
+      (c.items || []).map(i => '<div style="color:#cfd8dc;margin:2px 0;">' + esc(i) + '</div>').join('') +
+      '</div>').join('');
+  }).catch(e => {
+    document.getElementById("rulesBox").textContent = "规则加载失败: " + e.message;
+  });
+}
+
+function loadChangelog() {
+  fetch("/api/changelog").then(r => r.json()).then(d => {
+    const box = document.getElementById("changelogBox");
+    if (!d || !d.entries || !d.entries.length) { box.textContent = "暂无更新记录"; return; }
+    const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    box.innerHTML = d.entries.map(e =>
+      '<div style="margin-bottom:14px;padding:12px;border:1px solid #334;border-radius:6px;">' +
+      '<div style="font-weight:bold;color:#fff;margin-bottom:6px;">' + esc(e.date) + ' ' + esc(e.title) + '</div>' +
+      (e.items || []).map(i => '<div style="color:#cfd8dc;margin:2px 0;">· ' + esc(i) + '</div>').join('') +
+      '</div>').join('');
+  }).catch(e => {
+    document.getElementById("changelogBox").textContent = "更新日志加载失败: " + e.message;
+  });
+}
+
+addCustomItem();
+loadApiConfig();
+loadRules();
+loadChangelog();
+
+function exportResult() {
+  fetch("/api/export")
+    .then(r => r.json()).then(data => {
+      if (data.error) { log(data.error, "error"); return; }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "pipeline_result.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      log("Exported: pipeline_result.json", "success");
+    });
+}
+
+function resumeFromCheckpoint() {
+  fetch("/api/checkpoint").then(r => r.json()).then(cps => {
+    const steps = [1,2,3,4,5,6,7];
+    const next = steps.find(s => !cps["step" + s]);
+    if (next) runStep(next);
+    else log("所有步骤已完成", "success");
+    document.getElementById("btnResume").style.display = "none";
+  });
+}
+
+function resetPipeline() {
+  fetch("/api/reset", { method: "POST" })
+    .then(r => r.json()).then(() => {
+      pollStatus();
+      log("Pipeline reset", "info");
+    });
+}
+
+function pollStatus() {
+  fetch("/api/status").then(r => r.json()).then(status => {
+    if (status.error) return;
+    renderSteps(status);
+    document.getElementById("btnExport").disabled = !(status.results && status.results.postprocess);
+    document.getElementById("btnExportXlsx").disabled = !(status.results && status.results.postprocess);
+    document.getElementById("btnExportQueries").disabled = !(status.results && status.results.step7);
+    document.getElementById("btnExportQueriesXlsx").disabled = !(status.results && status.results.step7);
+    document.getElementById("btnRunAll").disabled = status.running;
+    const st6 = status.steps && status.steps[6];
+    const st7 = status.steps && status.steps[7];
+    const cfgHint = document.getElementById("cfgHint");
+    const btnRun = document.getElementById("btnRunStep7");
+    if (cfgHint) cfgHint.textContent = st6 === "done" ? "Step 6 已完成，可生成 Query" : "Step 6 未完成，请先完成清洗";
+    if (btnRun) btnRun.disabled = !(st6 === "done" && st7 !== "running");
+    if (!window.__cfgLoaded) { window.__cfgLoaded = true; loadStep7Config(); }
+    if (st7 === "done") window.__cfgLoaded = false;
+    // Check checkpoint status
+    fetch("/api/checkpoint").then(r => r.json()).then(cps => {
+      const hasCps = Object.values(cps).some(v => v === true);
+      const allDone = [1,2,3,4,5,6,7].every(s => status.steps[s] === "done");
+      if (hasCps && !allDone && !status.running) {
+        document.getElementById("btnResume").style.display = "";
+        let cpInfo = "检测到断点: " + [1,2,3,4,5,6,7].filter(s => cps["step" + s]).map(s => "Step " + s).join(", ");
+        document.getElementById("checkpointBar").textContent = cpInfo;
+      } else {
+        document.getElementById("btnResume").style.display = "none";
+        document.getElementById("checkpointBar").textContent = "";
+      }
+    });
+
+    // Update logs
+    const logs = status.logs || [];
+    const logBox = document.getElementById("logBox");
+    logBox.innerHTML = logs.slice(-50).map(l => {
+      const cls = "log-" + l.level;
+      return `<div class="${cls}"><span class="log-time">[${l.time}]</span>${l.msg}</div>`;
+    }).join("") || "等待操作...";
+    logBox.scrollTop = logBox.scrollHeight;
+
+    document.getElementById("statusBar").textContent = `步骤进度: ${Object.values(status.steps).filter(s => s === 'done').length}/7 | 运行中: ${status.running ? '是' : '否'}`;
+
+    // Check if all done
+    const allDone = Object.values(status.steps).every(s => s === "done" || s === "error");
+    if (allDone && pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  });
+}
+
+function log(msg, level) {
+  const t = new Date().toLocaleTimeString();
+  const logBox = document.getElementById("logBox");
+  const cls = "log-" + level;
+  logBox.innerHTML += `<div class="${cls}"><span class="log-time">[${t}]</span>${msg}</div>`;
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+// Initial poll
+pollTimer = setInterval(pollStatus, 1000);
+</script>
+</body>
+</html>

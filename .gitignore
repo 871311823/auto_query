@@ -1,0 +1,9 @@
+checkpoints/
+outputs/
+backup/
+build/
+dist/
+__pycache__/
+*.pyc
+config.json
+.tools/
