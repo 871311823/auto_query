@@ -83,6 +83,8 @@ state = {
     "results": {},
     "logs": [],
     "running": False,
+    # 最近一次「测试连接」通过的配置快照；保存时与当前配置比对，一致才放行（不再重复请求模型）
+    "tested_cfg": None,
 }
 
 def add_log(msg, level="info"):
@@ -385,21 +387,90 @@ class Handler(BaseHTTPRequestHandler):
         try: data = json.loads(body)
         except: data = {}
 
-        if path == "/api/configure":
+        if path == "/api/fetch_url":
+            # 自定义出题：URL 自动识别，抓取标题与正文
+            url = (data.get("url") or "").strip()
+            if not url:
+                self._json({"ok": False, "error": "请填写链接"})
+                return
+            if not url.startswith(("http://", "https://")):
+                self._json({"ok": False, "error": "链接必须以 http:// 或 https:// 开头"})
+                return
+            from core import fetch_page_info
+            add_log("正在抓取链接: " + url[:80], "info")
+            ok, info = fetch_page_info(url)
+            if not ok:
+                add_log("链接抓取失败: " + (info.get("error") or ""), "error")
+                self._json({"ok": False, "error": info.get("error") or "抓取失败"})
+                return
+            add_log("链接抓取成功，标题: " + (info.get("title") or "")[:40], "success")
+            self._json({"ok": True, "title": info.get("title") or "", "content": info.get("content") or ""})
+
+        elif path == "/api/test":
+            # 独立连通性测试：只验证不落库，用于「测试连接」按钮
+            base_url = (data.get("base_url") or "").strip()
+            api_key = (data.get("api_key") or "").strip()
+            model = (data.get("model") or "").strip()
+            from llm_client import test_connection
+            add_log("正在测试接口连通性...", "info")
+            ok, msg = test_connection(base_url, api_key, model)
+            if not ok:
+                add_log("接口测试失败: " + msg, "error")
+                self._json({"ok": False, "error": msg})
+                return
+            # 记住这份通过的配置，供保存时比对
+            state["tested_cfg"] = {
+                "base_url": base_url,
+                "api_key": api_key,
+                "model": model,
+            }
+            add_log("接口测试通过: " + msg, "success")
+            self._json({"ok": True, "message": msg})
+
+        elif path == "/api/configure":
+            # 构造候选配置：在现有配置基础上，用本次提交覆盖对应字段
+            cand = {
+                "base_url": state["config"].get("base_url", ""),
+                "api_key": state["config"].get("api_key", ""),
+                "model": state["config"].get("model", ""),
+            }
+            if "base_url" in data:
+                cand["base_url"] = (data.get("base_url") or "").strip()
+            if data.get("api_key"):
+                cand["api_key"] = (data.get("api_key") or "").strip()
+            if "model" in data:
+                cand["model"] = (data.get("model") or "").strip()
+
+            # 门：必须已有「测试连接」通过，且当前配置与该快照一致；否则拒绝保存
+            # 不再重复请求模型接口（避免二次调用超时，也符合「测试通过才允许保存」的语义）
+            tested = state.get("tested_cfg") or {}
+            if not tested:
+                add_log("保存被拒绝：尚未通过测试连接", "error")
+                self._json({"ok": False, "error": "尚未通过「测试连接」，请先点击「测试连接」"})
+                return
+            if (tested.get("base_url") != cand["base_url"] or
+                    tested.get("api_key") != cand["api_key"] or
+                    tested.get("model") != cand["model"]):
+                add_log("保存被拒绝：配置与测试时不一致", "error")
+                self._json({"ok": False, "error": "配置与「测试连接」通过时不一致，请重新测试"})
+                return
+
             if data.get("tophub_key"):
                 state["config"]["tophub_key"] = data["tophub_key"].strip()
-            if data.get("api_key"):
-                state["config"]["api_key"] = data["api_key"].strip()
-            if "base_url" in data: state["config"]["base_url"] = data["base_url"].strip()
-            if "model" in data: state["config"]["model"] = data["model"].strip()
-            if "provider" in data: state["config"]["provider"] = data["provider"].strip()
+            state["config"]["api_key"] = cand["api_key"]
+            state["config"]["base_url"] = cand["base_url"]
+            state["config"]["model"] = cand["model"]
+            if "provider" in data:
+                state["config"]["provider"] = (data.get("provider") or "").strip()
             from llm_client import set_llm_config
             set_llm_config(
                 base_url=state["config"]["base_url"],
                 api_key=state["config"]["api_key"],
                 model=state["config"]["model"],
             )
-            add_log("Configuration updated (内存生效，不落盘)", "info")
+            # 保存成功后清除测试快照，下次保存需重新测试
+            state["tested_cfg"] = None
+            add_log("配置已生效（测试通过后保存，不落盘）", "success")
             reset_pipeline()
             self._json({"ok": True, "api_key_set": bool(state["config"]["api_key"]), "tophub_key_set": bool(state["config"]["tophub_key"])})
 

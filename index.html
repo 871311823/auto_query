@@ -168,9 +168,11 @@ h1 { font-size: 20px; margin-bottom: 18px; color: #17233b; display: flex; align-
       <div class="field"><label>今日热榜 Tophub Key</label><input type="text" id="cfgTophubKey" placeholder="Tophub API Key"></div>
     </div>
     <div class="row">
-      <button class="step-btn btn-primary" onclick="saveApiConfig()">保存接口配置</button>
-      <span style="font-size:12px;color:#888;align-self:center;">支持官方直连、自采代理、中转站（OpenAI 兼容 /chat/completions）；保存后流水线检查点会被重置</span>
+      <button class="step-btn btn-primary" id="btnSaveApi" onclick="saveApiConfig()" disabled>保存接口配置</button>
+      <button class="step-btn" id="btnTestApi" onclick="testApiConnection()">测试连接</button>
+      <span style="font-size:12px;color:#888;align-self:center;">先「测试连接」通过后才能保存；支持官方直连、自采代理、中转站（OpenAI 兼容 /chat/completions）</span>
     </div>
+    <div id="apiTestResult" style="margin-top:10px;font-size:13px;line-height:1.6;white-space:pre-wrap;"></div>
   </div>
 </div>
 
@@ -378,13 +380,50 @@ function addCustomItem() {
   div.innerHTML =
     '<div id="customLabel_' + id + '" style="font-size:12px;color:#666;margin-bottom:6px;"></div>' +
     '<div class="row">' +
+      '<div class="field" style="flex:3;min-width:260px;"><label>链接（自动识别标题与内容）</label><input type="text" id="customUrl_' + id + '" placeholder="粘贴新闻/文章链接，点右侧识别"></div>' +
+      '<button class="step-btn" style="align-self:end;" id="customUrlBtn_' + id + '" onclick="fetchUrlInfo(' + id + ')">识别链接</button>' +
+    '</div>' +
+    '<div class="row">' +
       '<div class="field"><label>舆情标题</label><input type="text" id="customTitle_' + id + '" placeholder="标题"></div>' +
       '<div class="field"><label>来源（可选）</label><input type="text" id="customSource_' + id + '" placeholder="默认手动录入"></div>' +
       '<div class="field"><label>品类（留空自动识别）</label><select id="customCategory_' + id + '">' + categoryOptions("") + '</select></div>' +
       '<button class="step-btn btn-danger" style="align-self:end;" onclick="removeCustomItem(' + id + ')">删除</button>' +
     '</div>' +
-    '<div class="row"><div class="field" style="flex:2;min-width:300px;"><label>舆情内容</label><textarea id="customContent_' + id + '" rows="3" style="width:100%;"></textarea></div></div>';
+    '<div class="row"><div class="field" style="flex:2;min-width:300px;"><label>舆情内容</label><textarea id="customContent_' + id + '" rows="3" style="width:100%;"></textarea></div></div>' +
+    '<div id="customUrlStatus_' + id + '" style="font-size:12px;color:#888;margin-top:4px;"></div>';
   document.getElementById("customItems").appendChild(div);
+}
+
+function fetchUrlInfo(id) {
+  const urlInput = document.getElementById("customUrl_" + id);
+  const statusEl = document.getElementById("customUrlStatus_" + id);
+  const btn = document.getElementById("customUrlBtn_" + id);
+  const url = (urlInput ? urlInput.value : "").trim();
+  if (!url) { if (statusEl) statusEl.textContent = "请先粘贴链接"; return; }
+  if (btn) { btn.disabled = true; btn.textContent = "识别中..."; }
+  if (statusEl) { statusEl.textContent = "正在抓取链接..."; statusEl.style.color = "#5f6b7a"; }
+  fetch("/api/fetch_url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: url }),
+  }).then(r => r.json()).then(d => {
+    if (btn) { btn.disabled = false; btn.textContent = "识别链接"; }
+    if (!d.ok) {
+      if (statusEl) { statusEl.textContent = "✘ " + (d.error || "抓取失败"); statusEl.style.color = "#c62828"; }
+      return;
+    }
+    const titleInput = document.getElementById("customTitle_" + id);
+    const contentInput = document.getElementById("customContent_" + id);
+    if (d.title && titleInput) titleInput.value = d.title;
+    if (d.content && contentInput) contentInput.value = d.content;
+    if (statusEl) {
+      statusEl.textContent = "✔ 已识别，标题：" + (d.title || "(未识别到标题)");
+      statusEl.style.color = "#2e7d32";
+    }
+  }).catch(e => {
+    if (btn) { btn.disabled = false; btn.textContent = "识别链接"; }
+    if (statusEl) { statusEl.textContent = "✘ 识别请求失败: " + e.message; statusEl.style.color = "#c62828"; }
+  });
 }
 
 function runClassify() {
@@ -483,26 +522,98 @@ function exportCustomXlsx() {
     .catch(e => log("Export custom Excel failed: " + e.message, "error"));
 }
 
+let apiTestPassed = null; // 通过测试的配置快照（JSON 字符串）
+
+// 接口配置页内的结果显示（不依赖流水线页的日志区）
+function apiTestMessage(msg, level) {
+  const el = document.getElementById("apiTestResult");
+  if (!el) return;
+  const colors = { success: "#2e7d32", error: "#c62828", info: "#5f6b7a" };
+  el.innerHTML = '<div style="color:' + (colors[level] || colors.info) + ';">' + msg + '</div>';
+}
+
+function apiConfigSnapshot() {
+  return JSON.stringify({
+    base_url: document.getElementById("cfgBaseUrl").value.trim(),
+    model: document.getElementById("cfgModel").value.trim(),
+    api_key: document.getElementById("cfgApiKey").value.trim(),
+  });
+}
+
+function invalidateApiTest() {
+  apiTestPassed = null;
+  const saveBtn = document.getElementById("btnSaveApi");
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.title = "请先通过「测试连接」"; }
+}
+
+function testApiConnection() {
+  const base_url = document.getElementById("cfgBaseUrl").value.trim();
+  const api_key = document.getElementById("cfgApiKey").value.trim();
+  const model = document.getElementById("cfgModel").value.trim();
+  if (!base_url) { apiTestMessage("请先填写 Base URL", "error"); return; }
+  if (!api_key) { apiTestMessage("请先填写 API Key", "error"); return; }
+  if (!model) { apiTestMessage("请先填写模型名", "error"); return; }
+  const btn = document.getElementById("btnTestApi");
+  const originalText = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "测试中..."; }
+  apiTestMessage("正在测试接口连通性，请稍候...", "info");
+  fetch("/api/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base_url, api_key, model }),
+  }).then(r => r.json()).then(d => {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    if (d.ok) {
+      apiTestMessage("✔ 接口测试通过：" + (d.message || ""), "success");
+      apiTestPassed = apiConfigSnapshot();
+      const saveBtn = document.getElementById("btnSaveApi");
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.title = ""; }
+    } else {
+      apiTestMessage("✘ 接口测试失败：" + (d.error || d.message || "未知错误"), "error");
+      invalidateApiTest();
+    }
+  }).catch(e => {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    apiTestMessage("✘ 测试请求失败: " + e.message, "error");
+    invalidateApiTest();
+  });
+}
+
 function saveApiConfig() {
+  // 门：必须已通过测试，且当前字段与测试时一致
+  if (!apiTestPassed || apiTestPassed !== apiConfigSnapshot()) {
+    apiTestMessage("请先通过「测试连接」再保存", "error");
+    invalidateApiTest();
+    return;
+  }
   const body = {
     base_url: document.getElementById("cfgBaseUrl").value.trim(),
     model: document.getElementById("cfgModel").value.trim(),
     provider: document.getElementById("cfgProvider").value.trim(),
+    api_key: document.getElementById("cfgApiKey").value.trim(),
   };
-  const ak = document.getElementById("cfgApiKey").value.trim();
   const tk = document.getElementById("cfgTophubKey").value.trim();
-  if (ak) body.api_key = ak;
   if (tk) body.tophub_key = tk;
+  const btn = document.getElementById("btnSaveApi");
+  const originalText = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "保存中..."; }
+  apiTestMessage("正在保存接口配置...", "info");
   fetch("/api/configure", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }).then(r => r.json()).then(d => {
-    if (d.error) { log(d.error, "error"); return; }
-    log("接口配置已生效（仅本次会话，不落盘）", "success");
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    if (d.error) { apiTestMessage("✘ 保存失败：" + d.error, "error"); return; }
+    apiTestMessage("✔ 接口配置已生效（仅本次会话，不落盘）", "success");
     document.getElementById("cfgApiKey").value = "";
     document.getElementById("cfgTophubKey").value = "";
+    apiTestPassed = null;
+    invalidateApiTest();
     loadApiConfig();
+  }).catch(e => {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    apiTestMessage("✘ 保存请求失败: " + e.message, "error");
   });
 }
 
@@ -555,6 +666,12 @@ addCustomItem();
 loadApiConfig();
 loadRules();
 loadChangelog();
+
+// 接口配置关键字段一旦变化，就使已通过的测试失效，保存按钮重新禁用
+["cfgBaseUrl", "cfgModel", "cfgApiKey"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("input", invalidateApiTest);
+});
 
 function exportResult() {
   fetch("/api/export")

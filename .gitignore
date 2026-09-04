@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 config.json
 .tools/
+server.log
+server.log.err

@@ -343,6 +343,47 @@ def _article_too_old(text):
     return False
 
 
+def _extract_title(html_text):
+    """从 HTML 提取页面标题：优先 <title>，其次 h1"""
+    try:
+        doc = html.fromstring(html_text)
+        h1s = [h.text_content().strip() for h in doc.xpath("//h1") if h.text_content().strip()]
+        if h1s:
+            return re.sub(r"\s+", " ", h1s[0])[:120]
+        ts = doc.xpath("//title")
+        if ts:
+            t = re.sub(r"\s+", " ", ts[0].text_content()).strip()
+            for sep in (" - ", "_", "|", "—"):
+                if sep in t:
+                    t = t.split(sep)[0].strip()
+                    break
+            return t[:120]
+    except Exception:
+        pass
+    return ""
+
+
+def fetch_page_info(url, timeout=TIMEOUT):
+    """抓取单页并提取标题与正文，用于自定义出题的 URL 识别。
+
+    返回 (ok, dict)。dict 含 title / content / error。
+    """
+    status, body = _fetch(url, timeout=timeout)
+    if not body:
+        return False, {"error": f"抓取失败: {status}", "title": "", "content": ""}
+    if status != 200:
+        return False, {"error": f"HTTP {status}", "title": "", "content": ""}
+    if "verify" in body[:500].lower() or "captcha" in body[:500].lower():
+        return False, {"error": "页面要求验证（验证码/风控），无法自动抓取", "title": "", "content": ""}
+    title = _extract_title(body)
+    text = _extract_article(body)
+    if len(text) < 50:
+        return False, {"error": f"正文过短({len(text)}字)，可能被反爬拦截", "title": title, "content": ""}
+    if _looks_like_footer(text) and len(text) < 600:
+        return False, {"error": "仅抓到页脚信息", "title": title, "content": ""}
+    return True, {"title": title, "content": text[:MAX_FULL_TEXT], "error": ""}
+
+
 def fetch_direct(url, timeout=TIMEOUT):
     status, body = _fetch(url, timeout=timeout)
     if not body:
